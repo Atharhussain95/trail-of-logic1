@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Skin Color Detection</title>
+    <link rel="stylesheet" href="style.css">
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/body-pix"></script>
+
+    
+</head>
+<body>
+    <input type="file" id="imageInput" accept="image/*">
+    <canvas id="canvas" width="400" height="400" style="border:1px solid #000;"></canvas>
+    <div id="result"></div>
+    <div id="colorSuggestions"></div>
+
+<script>
+document.getElementById('imageInput').addEventListener('change', handleImage);
+
+async function handleImage() {
+    var input = document.getElementById('imageInput');
+    var file = input.files[0];
+
+    if (file) {
+        var reader = new FileReader();
+        reader.onload = async function(e) {
+            var img = new Image();
+            img.src = e.target.result;
+            img.onload = async function() {
+                await detectSkinColor(img);
+            };
+        };
+        reader.readAsDataURL(file);
+    }
+}
+
+async function detectSkinColor(img) {
+    var canvas = document.getElementById('canvas');
+    var ctx = canvas.getContext('2d');
+    ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
+
+    // Load BodyPix model
+    const net = await bodyPix.load();
+
+    // Predict segmentation
+    const segmentation = await net.segmentPerson(img);
+
+    // Extract pixels from the image
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const pixels = imageData.data;
+
+    // Count pixels that are classified as skin
+    var skinPixels = 0;
+    for (let i = 0; i < segmentation.data.length; i++) {
+        if (segmentation.data[i] === 0) {
+            skinPixels++;
+        }
+    }
+
+    // Calculate the percentage of skin pixels
+    var totalPixels = canvas.width * canvas.height;
+    var skinPercentage = (skinPixels / totalPixels) * 100;
+
+    // Classify skin tone based on RGB color
+    var avgColor = calculateAverageColor(pixels, segmentation);
+    var result = classifySkinTone(avgColor);
+
+    // Display result on the page
+    document.getElementById('result').innerHTML = 'The detected skin color is: ' + result;
+
+    // Get complementary colors based on skin tone
+    var complementaryColors = getComplementaryColors(result);
+    
+    // Display complementary colors on the page
+    document.getElementById('colorSuggestions').innerHTML = 'Complementary colors: ' + complementaryColors.join(', ');
+}
+
+function calculateAverageColor(pixels, segmentation) {
+    var avgColor = { r: 0, g: 0, b: 0 };
+    var skinPixels = 0;
+
+    for (let i = 0; i < pixels.length; i += 4) {
+        if (segmentation.data[i / 4] === 0) {
+            avgColor.r += pixels[i];
+            avgColor.g += pixels[i + 1];
+            avgColor.b += pixels[i + 2];
+            skinPixels++;
+        }
+    }
+
+    avgColor.r /= skinPixels;
+    avgColor.g /= skinPixels;
+    avgColor.b /= skinPixels;
+
+    return avgColor;
+}
+
+function classifySkinTone(avgColor) {
+    // Simple classification based on average RGB values
+    if (avgColor.r > 230 && avgColor.g > 200 && avgColor.b > 180) {
+        return 'Very Light';
+    } else if (avgColor.r > 200 && avgColor.g > 160 && avgColor.b > 130) {
+        return 'Light';
+    } else if (avgColor.r > 170 && avgColor.g > 120 && avgColor.b > 100) {
+        return 'Light-Medium';
+    } else if (avgColor.r > 140 && avgColor.g > 100 && avgColor.b > 80) {
+        return 'Medium';
+    } else if (avgColor.r > 110 && avgColor.g > 80 && avgColor.b > 60) {
+        return 'Medium-Dark';
+    } else {
+        return 'Dark';
+    }
+}
+
+function getComplementaryColors(skinTone) {
+        // Define complementary colors for each skin tone category
+        const colorMap = {
+            'Very Light': ['soft-blues', 'peach', 'mint-green'],
+            'Light': ['soft-pinks', 'sky-blue', 'light-corals'],
+            'Light-Medium': ['soft-oranges', 'rose', 'lavender', 'rose-gold'],
+            'Medium': ['mustard-yellow', 'teal', 'bold-reds'],
+            'Medium-Dark': ['burnt-oranges', 'forest-green', 'burgundy'],
+            'Dark': ['rich-blues', 'deep-purples', 'charcoal-gray']
+        };
+
+        // Return complementary colors based on the detected skin tone
+        return colorMap[skinTone] || ['neutral-tones'];
+    }
+
+    // Example usage
+    const skinTone = 'Light';
+    const complementaryColors = getComplementaryColors(skinTone);
+
+    // Display color blocks
+    complementaryColors.forEach(colorClass => {
+        document.write(`<div class="color-block ${colorClass}"></div>`);
+    });
+</script>
+</body>
+</html>
